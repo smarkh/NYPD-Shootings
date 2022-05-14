@@ -1,0 +1,171 @@
+---
+title: "Project 1"
+output: pdf_document
+date: '2022-05-03'
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+## Importing Data
+
+This data is from the following URL: "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+
+This is a breakdown of every shooting incident that occurred in NYC going back to 2006 through the end of the previous calendar year. This data is manually extracted every quarter and reviewed by the Office of Management Analysis and Planning before being posted on the NYPD website. Each record represents a shooting incident in NYC and includes information about the event, the location and time of occurrence. In addition, information related to suspect and victim demographics is also included.
+
+```{r}
+url_data <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+
+shootings <- read.csv(url_data)
+```
+
+## Tidying data
+
+While tidying I will perform the following actions:
+
+remove the following columns:
+
+* INCIDENT_KEY
+* JURISDICTION_CODE
+* LOCATION_DESC
+* STATISTICAL_MURDER_FLAG
+* X_COORD_CD
+* Y_COORD_CD
+* Lon_Lat
+
+change the following variables into factors:
+
+* PERP_SEX
+* PERP_RACE
+* VIC_AGE_GROUP
+* VIC_SEX
+* VIC_RACE
+* PRECINCT
+
+change the following variables into dates:
+
+* OCCUR_DATE
+
+change the following variables into times:
+
+* OCCUR_TIME
+
+```{r}
+shootings_tidy <- shootings %>% 
+  select(-c(INCIDENT_KEY                      # remove columns
+              ,JURISDICTION_CODE
+              ,LOCATION_DESC
+              ,STATISTICAL_MURDER_FLAG
+              ,X_COORD_CD
+              ,Y_COORD_CD
+              ,Lon_Lat)) %>%
+  mutate_at(vars(PERP_AGE_GROUP               # change to factors
+                  ,PERP_SEX
+                  ,PERP_RACE
+                  ,VIC_AGE_GROUP
+                  ,VIC_SEX
+                  ,VIC_RACE
+                  ,PRECINCT), factor) %>%
+  mutate(OCCUR_DATE = as.Date(OCCUR_DATE, "%m/%d/%Y")) %>%  # change to dates
+  mutate(OCCUR_TIME = as.POSIXct(OCCUR_TIME, format = "%H:%M:%S")) # change to times
+
+```
+
+## Data Visualization
+
+In this section, I added a bar chart of the average number of shootings per year per 100k people by precinct, and a line graph of daily shootings over time for the year of 2020.
+
+```{r}
+# summarize by precinct
+shootings_tidy$count = 1
+by_precinct <- shootings_tidy %>%
+  group_by(PRECINCT) %>%
+  summarize(shootings = sum(count)) 
+
+# bar chart of shootings by precinct
+by_precinct %>% 
+  ggplot(aes(x=PRECINCT, y=shootings))+
+  geom_bar(stat='identity') +
+  ylim(0, max(by_precinct$shootings)) +
+  labs(title="Total Shootings Since 2006",
+        x ="Precinct ID", y = "Shootings")
+
+# summarize by date
+by_date <- shootings_tidy %>%
+  group_by(OCCUR_DATE) %>%
+  summarize(shootings = sum(count), shootings_per_100k = sum(count)/100000) 
+
+# total NYC shootings over time
+by_date %>%
+  filter(between(OCCUR_DATE, as.Date('2020-01-01'), as.Date('2020-12-31'))) %>%
+  ggplot(aes(x=OCCUR_DATE, y=shootings)) +
+  geom_line(stat='identity') +
+  geom_hline(yintercept = mean(by_date$shootings), color="blue") +
+  labs(title="2020 NYC Daily Shootings",
+        x ="Date", y = "Shootings") 
+
+```
+
+## Analyze the data
+
+The first thing that I noticed was that there was a drastic spike in shootings during a few months during 2020, I wanted to answer the question "is this a common occurrence, or is it a yearly thing?". by using the chart titled "Average Daily Shootings by Month", I found out that this is a yearly thing. The average daily shootings each month seems to increase during summer months, so it was not just a fluke year. This would indicate that something about summer could cause an increase in shootings and potentially crime as a whole in New York City. This could be something to look into further. What could cause this increase?
+
+The next thing that I analyzed was a transformation of the total shootings by precinct. I felt like that metric was not representative of anything useful. So I transformed it to the average shootings per 100k people in each precinct. This seems to be a more helpful metric about the safety of each precinct. This raises the question about what makes specific precincts more dangerous than others? It would be interesting to look into the demographics of each area and see if precincts with more shootings have any similarities.
+
+
+```{r}
+# average shootings per day by year
+# add month column 
+by_date$MonthN <- as.numeric(format(as.Date(by_date$OCCUR_DATE),"%m")) # Month's number
+by_date$Month  <- months(as.Date(by_date$OCCUR_DATE), abbreviate=TRUE) # Month's abbr.
+by_date$Year <- as.numeric(format(as.Date(by_date$OCCUR_DATE),"%y")) +2000
+
+by_date %>%
+  filter(between(OCCUR_DATE, as.Date('2006-01-01'), as.Date('2020-12-31'))) %>%
+  group_by(MonthN) %>%
+  summarize(shootings = mean(shootings)) %>%
+  ggplot(aes(x = MonthN, y = shootings)) + 
+   geom_line() +
+   #geom_point() +
+   scale_x_discrete(breaks = by_date$MonthN, labels = by_date$Month) +
+  labs(title="Average Daily Shootings by Month",
+        x ="Date", y = "Shootings")
+
+
+# transform shootings to average shootings per 100k people per year
+by_precinct_trans <- shootings_tidy %>%
+  group_by(PRECINCT) %>%
+  summarize(shootings = sum(count), shootings_per_100k = (sum(count)/100000)/14) 
+
+# graph transformation
+by_precinct_trans %>% 
+  ggplot(aes(x=PRECINCT, y=shootings_per_100k))+
+  geom_bar(stat='identity') +
+  labs(title="Average Shootings per 100K People per Year",
+        x ="Precinct ID", y = "Shootings")
+```
+
+## Model
+
+I used latitude and longitude to create a linear model.
+
+```{r}
+lin_mod <- lm(count~Latitude+Longitude , data=shootings_tidy)
+
+summary(lin_mod)
+```
+
+## Bias Sources
+
+A couple sources of bias that I think could be found in my report would be that some precincts may not report every single shooting due to having less resources, or the people not reporting it to the police. So data integrity may need more investigation. To mitigate this, we could remove outliers, so that if one precinct reports shootings differently than others their shooting counts would not be viewed in this data. 
+
+Another source of bias that may be present in my report is that I do not live in New York, and have no personal experience there. All I know is news reports about its relative danger to other parts of the country, which could have an effect on how I viewed the data. To mitigate this, I removed any variables about race and gender that may I may have some pre-conceived notions about. This way the only values used in this analysis are those that are completely objective and could be applied to anywhere from anyone, therefore removing the ability for any biases I have to effect the analysis.
+
+# session info section
+```{r}
+sessionInfo()
+```
+
