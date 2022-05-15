@@ -93,6 +93,23 @@ by_precinct %>%
   labs(title="Total Shootings Since 2006",
         x ="Precinct ID", y = "Shootings")
 
+# Top 10
+top_ten <- head(by_precinct[order(-by_precinct$shootings),], 10)
+top_ten %>% 
+  ggplot(aes(x=PRECINCT, y=shootings))+
+  geom_bar(stat='identity') +
+  ylim(0, max(by_precinct$shootings)) +
+  labs(title="Total Shootings Since 2006",
+        x ="Precinct ID", y = "Shootings")
+
+# Bottom 10
+bottom_ten <- head(by_precinct[order(by_precinct$shootings),], 10)
+bottom_ten %>% 
+  ggplot(aes(x=PRECINCT, y=shootings))+
+  geom_bar(stat='identity') +
+  labs(title="Total Shootings Since 2006",
+        x ="Precinct ID", y = "Shootings")
+
 # summarize by date
 by_date <- shootings_tidy %>%
   group_by(OCCUR_DATE) %>%
@@ -127,12 +144,25 @@ by_date %>%
   filter(between(OCCUR_DATE, as.Date('2006-01-01'), as.Date('2020-12-31'))) %>%
   group_by(MonthN) %>%
   summarize(shootings = mean(shootings)) %>%
-  ggplot(aes(x = MonthN, y = shootings)) + 
-   geom_line() +
-   #geom_point() +
-   scale_x_discrete(breaks = by_date$MonthN, labels = by_date$Month) +
+
+by_date$Month <- factor(by_date$Month,levels = c("Jan", 
+                                                 "Feb", 
+                                                 "Mar", 
+                                                 "Apr", 
+                                                 "May", 
+                                                 "Jun", 
+                                                 "Jul", 
+                                                 "Aug", 
+                                                 "Sep", 
+                                                 "Oct", 
+                                                 "Nov", 
+                                                 "Dec"))
+
+by_date %>%
+  ggplot(aes(x=Month, y=shootings)) + 
+  geom_boxplot() +
   labs(title="Average Daily Shootings by Month",
-        x ="Date", y = "Shootings")
+        x ="month", y = "Shootings")
 
 
 # transform shootings to average shootings per 100k people per year
@@ -141,6 +171,7 @@ by_precinct_trans <- shootings_tidy %>%
   summarize(shootings = sum(count), shootings_per_100k = (sum(count)/100000)/14) 
 
 # graph transformation
+
 by_precinct_trans %>% 
   ggplot(aes(x=PRECINCT, y=shootings_per_100k))+
   geom_bar(stat='identity') +
